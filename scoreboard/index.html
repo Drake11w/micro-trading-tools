@@ -53,19 +53,20 @@ canvas{width:100%;height:120px;display:block;margin-top:10px}
 <div><label>Trailing drawdown (1/0)</label><input id="s_trail" type="number"></div>
 <div><label>Max trades / attempt</label><input id="s_maxT" type="number"></div>
 <div><label>Consistency cap % (0=off)</label><input id="s_cons" type="number"></div>
+<div><label>Floor locks at +$ (0=off)</label><input id="s_lock" type="number"></div>
 <div><label>Simulations</label><input id="s_sims" type="number"></div>
 <div><label>Candidate pass odds ≥ %</label><input id="s_passMin" type="number"></div>
 <div><label>Efficiency watch ≥</label><input id="s_eff" type="number"></div>
 </div></details>
 
 <div class="bar"><select id="sort" onchange="render()"><option value="pass">Sort: pass odds</option><option value="eff">Sort: efficiency</option><option value="net">Sort: net profit</option><option value="pf">Sort: profit factor</option><option value="n">Sort: trades</option></select><button class="g2" onclick="togBackup()">Backup</button></div>
-<div id="bk" class="c" style="display:none"><h2>Backup / restore</h2><textarea id="bkt" placeholder="Export fills this box. To restore, paste a backup here and tap Restore."></textarea><div class="row"><button onclick="exp()">Export</button><button class="g2" onclick="imp()">Restore</button></div></div>
+<div id="bk" class="c" style="display:none"><h2>Backup / restore</h2><textarea id="bkt" placeholder="Export fills this box. To restore, paste a backup here and tap Restore."></textarea><div class="row"><button onclick="exp()">Export</button><button class="g2" onclick="imp()">Restore from box</button></div><label style="margin-top:10px">Or restore from a backup file</label><input type="file" accept=".json" onchange="impFile(this.files[0])"></div>
 <div id="list"></div>
 <div class="n">Pass odds come from resampling each strategy's own trades (bootstrap), so they assume trades are independent and the future resembles the past. Efficiency = profit ÷ max drawdown, forced to −99 under 100 trades. Not trading advice.</div>
 </div>
 <script>
 const $=i=>document.getElementById(i);
-const DEF={target:3000,dd:2000,trail:1,maxT:400,cons:0,sims:3000,passMin:50,eff:5};
+const DEF={target:3000,dd:2000,trail:1,maxT:300,cons:50,sims:3000,passMin:50,eff:5,lock:100};
 let S={strats:[],set:{...DEF}};
 try{const x=JSON.parse(localStorage.getItem('sb1')||'null');if(x){S.strats=x.strats||[];S.set={...DEF,...(x.set||{})}}}catch(e){}
 const save=()=>{try{localStorage.setItem('sb1',JSON.stringify(S))}catch(e){}};
@@ -81,12 +82,13 @@ function metrics(st){
  let pass=0,bust=0,to=0,sumT=0;const cap=set.cons/100,trail=set.trail===1;
  for(let s=0;s<N;s++){let e=0,p=0,res=0,t,best=0;
   for(t=1;t<=set.maxT;t++){const v=a[(r()*n)|0];e+=v;if(v>best)best=v;if(e>p)p=e;
-   if(e<=(trail?p-set.dd:-set.dd)){res=-1;break}
+   const fl=trail?(set.lock>0?Math.min(p-set.dd,set.lock):p-set.dd):-set.dd;if(e<=fl){res=-1;break}
    if(e>=set.target){if(cap>0&&best>cap*e)continue;res=1;break}}
   if(res===1){pass++;sumT+=t}else if(res===-1)bust++;else to++}
  return cache[key]={n,net:eq,mdd,eff,wr:w.length/n,pf:gl?gw/gl:Infinity,exp:eq/n,pass:pass/N,bust:bust/N,to:to/N,att:pass?sumT/pass:0}}
 function usd(x,d=0){return(x<0?'−':'')+'$'+fmt(Math.abs(x),d)}
 function fmt(x,d=0){return isFinite(x)?x.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'∞'}
+function beats(s,m){if(s.bh==null)return true;return s.bhdd>0?(m.mdd>0?m.net/m.mdd:Infinity)>s.bh/s.bhdd:m.net>s.bh}
 function render(){
  const key=$('sort').value;const L=S.strats.map(s=>({s,m:metrics(s)}));
  const val={pass:x=>x.m.pass,eff:x=>x.m.eff,net:x=>x.m.net,pf:x=>isFinite(x.m.pf)?x.m.pf:1e9,n:x=>x.m.n}[key];
@@ -95,15 +97,15 @@ function render(){
  $('list').innerHTML=L.map(({s,m},i)=>{
   const pm=S.set.passMin/100,pc=m.pass>=pm?'ok':m.pass>=pm/2?'warn':'bad';
   let b='';
-  const cand=m.pass>=pm&&m.n>=100&&(s.bh==null||m.net>s.bh);
+  const cand=m.pass>=pm&&m.n>=100&&beats(s,m);
   b+=cand?`<span class="badge ok">CANDIDATE</span>`:m.n<100?`<span class="badge warn">NEEDS DATA (${m.n}/100 trades)</span>`:`<span class="badge bad">BELOW BAR</span>`;
   if(m.n>=100&&m.eff>=S.set.eff)b+=`<span class="badge ok">WATCH · eff ${fmt(m.eff,1)}</span>`;
-  if(s.bh!=null)b+=`<span class="badge ${m.net>s.bh?'ok':'bad'}">${m.net>s.bh?'Beats':'Loses to'} buy &amp; hold (${usd(s.bh)})</span>`;
+  if(s.bh!=null){const bt=beats(s,m);b+=`<span class="badge ${bt?'ok':'bad'}">${bt?'Beats':'Loses to'} buy &amp; hold${s.bhdd>0?' (eff '+fmt(m.eff===-99?(m.mdd>0?m.net/m.mdd:0):m.net/m.mdd,1)+' vs '+fmt(s.bh/s.bhdd,1)+')':' ('+usd(s.bh)+')'}</span>`}
   const warn=m.n<50?`<div class="n warn">Only ${m.n} trades: treat these odds as unreliable.</div>`:'';
   return `<div class="c" id="c${s.id}"><div class="rank"><div class="rn">${i+1}</div><div style="flex:1"><div class="nm">${esc(s.name)}</div><div class="mut" style="font-size:12px">Eval pass odds</div><div class="pv ${pc}">${fmt(m.pass*100,1)}%</div>${b}</div></div>
   ${warn}<div class="m"><div>Net<b class="${m.net>=0?'ok':'bad'}">${usd(m.net)}</b></div><div>Max DD<b>${usd(m.mdd)}</b></div><div>Efficiency<b>${m.eff===-99?'−99':fmt(m.eff,2)}</b></div><div>Trades<b>${m.n}</b></div><div>Win rate<b>${fmt(m.wr*100)}%</b></div><div>Profit factor<b>${fmt(m.pf,2)}</b></div><div>Expectancy<b>${usd(m.exp,1)}</b></div><div>Bust<b class="bad">${fmt(m.bust*100,1)}%</b></div><div>Avg trades to pass<b>${m.att?fmt(m.att):'—'}</b></div></div>
   <details><summary style="margin-top:10px">Details</summary><canvas data-id="${s.id}"></canvas>
-  <div class="row"><div style="flex:1"><label>Buy &amp; hold P&amp;L</label><input type="number" value="${s.bh??''}" onchange="setBH('${s.id}',this.value)"></div><div style="flex:1"><label>Name</label><input value="${esc(s.name)}" onchange="rename('${s.id}',this.value)"></div></div>
+  <div class="row"><div style="flex:1"><label>Buy &amp; hold P&amp;L</label><input type="number" value="${s.bh??''}" onchange="setBH('${s.id}',this.value)"></div><div style="flex:1"><label>B&amp;H max drawdown $</label><input type="number" value="${s.bhdd??''}" onchange="setBHDD('${s.id}',this.value)"></div><div style="flex:1"><label>Name</label><input value="${esc(s.name)}" onchange="rename('${s.id}',this.value)"></div></div>
   <div class="row"><button class="d" onclick="del('${s.id}')">Delete</button></div></details></div>`}).join('');
  document.querySelectorAll('details.c ~ #list details,#list details').forEach(d=>d.ontoggle=()=>{if(d.open){const c=d.querySelector('canvas');if(c)draw(c)}})}
 function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;const r=devicePixelRatio||1,W=c.clientWidth,H=120;c.width=W*r;c.height=H*r;const x=c.getContext('2d');x.scale(r,r);
@@ -112,6 +114,7 @@ function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;cons
  x.strokeStyle='#6aa8ff';x.lineWidth=2;x.beginPath();p.forEach((v,i)=>{const X=i/(p.length-1)*(W-4)+2,Y=H-6-(v-mn)/rg*(H-12);i?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke()}
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function setBH(id,v){const s=S.strats.find(x=>x.id===id);s.bh=v===''?null:+v;save();render()}
+function setBHDD(id,v){const s=S.strats.find(x=>x.id===id);s.bhdd=v===''?null:+v;save();render()}
 function rename(id,v){const s=S.strats.find(x=>x.id===id);s.name=v||s.name;save()}
 function del(id){if(!confirm('Delete this strategy?'))return;S.strats=S.strats.filter(x=>x.id!==id);save();render()}
 /* ---------- import ---------- */
@@ -140,6 +143,7 @@ function add(){const p=parse();if(!p||p.err){alert(p?p.err:'Paste or choose a fi
  cache={};save();render();$('paste').value='';$('nm').value='';$('bh').value='';$('pv').textContent='';window.scrollTo({top:document.getElementById('list').offsetTop-10,behavior:'smooth'})}
 function demo(){let x=7;const mk=(n,wp,aw,al)=>Array.from({length:n},()=>{x=(x*16807)%2147483647;const r=x/2147483647;x=(x*16807)%2147483647;const q=x/2147483647;return Math.round(r<wp?aw*(0.5+q):-al*(0.5+q))});
  S.strats.push({id:'d'+Date.now(),name:'Demo · trend breakout',trades:mk(180,.42,260,150),bh:900},{id:'e'+Date.now(),name:'Demo · mean reversion',trades:mk(140,.62,90,140),bh:null});cache={};save();render()}
+function impFile(f){if(!f)return;const r=new FileReader();r.onload=()=>{$('bkt').value=r.result;imp()};r.readAsText(f)}
 function togBackup(){const b=$('bk');b.style.display=b.style.display==='none'?'block':'none'}
 function exp(){$('bkt').value=JSON.stringify(S);$('bkt').select();try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='scoreboard-backup.json';a.click()}catch(e){}}
 function imp(){try{const x=JSON.parse($('bkt').value);if(!x.strats)throw 0;S={strats:x.strats,set:{...DEF,...(x.set||{})}};cache={};save();for(const k in DEF)$('s_'+k).value=S.set[k];render()}catch(e){alert('That does not look like a backup.')}}
