@@ -29,7 +29,7 @@ summary{cursor:pointer;color:var(--mut);font-size:13px;margin-bottom:8px}
 .badge{display:inline-block;padding:2px 9px;border-radius:99px;border:1px solid;font-size:12px;margin:6px 6px 0 0}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mut{color:var(--mut)}
 .m{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.m div{font-size:11.5px;color:var(--mut)}.m b{display:block;font-size:15px;color:var(--tx);font-weight:600}
-canvas{width:100%;height:120px;display:block;margin-top:10px}
+canvas{width:100%;height:120px;display:block;margin-top:10px;touch-action:pan-y;cursor:grab;user-select:none}
 .n{color:var(--mut);font-size:12px;margin-top:8px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
 .chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--tx);margin:0}.chk input{width:auto}
 .empty{text-align:center;color:var(--mut);padding:26px 10px}
@@ -106,30 +106,56 @@ function render(){
   const warn=m.n<50?`<div class="n warn">Only ${m.n} trades: treat these odds as unreliable.</div>`:'';
   return `<div class="c" id="c${s.id}"><div class="rank"><div class="rn">${i+1}</div><div style="flex:1"><div class="nm">${esc(s.name)}</div><div class="mut" style="font-size:12px">Eval pass odds</div><div class="pv ${pc}">${fmt(m.pass*100,1)}%</div>${b}</div></div>
   ${warn}<div class="m"><div>Net<b class="${m.net>=0?'ok':'bad'}">${usd(m.net)}</b></div><div>Max DD<b>${usd(m.mdd)}</b></div><div>Efficiency<b>${m.eff===-99?'−99':fmt(m.eff,2)}</b></div><div>Trades<b>${m.n}</b></div><div>Win rate<b>${fmt(m.wr*100)}%</b></div><div>Profit factor<b>${fmt(m.pf,2)}</b></div><div>Expectancy<b>${usd(m.exp,1)}</b></div><div>Bust<b class="bad">${fmt(m.bust*100,1)}%</b></div><div>Avg trades to pass<b>${m.att?fmt(m.att):'—'}</b></div></div>
-  <details><summary style="margin-top:10px">Details</summary><canvas data-id="${s.id}"></canvas><div class="n"></div>
+  <details><summary style="margin-top:10px">Details</summary><canvas data-id="${s.id}"></canvas><div class="n"></div><div class="n">Pinch or scroll to zoom · drag to pan · double-tap to reset</div>
   <div class="row"><div style="flex:1"><label>Buy &amp; hold P&amp;L</label><input type="number" value="${s.bh??''}" onchange="setBH('${s.id}',this.value)"></div><div style="flex:1"><label>B&amp;H max drawdown $</label><input type="number" value="${s.bhdd??''}" onchange="setBHDD('${s.id}',this.value)"></div><div style="flex:1"><label>Name</label><input value="${esc(s.name)}" onchange="rename('${s.id}',this.value)"></div></div>
   <div class="row"><button class="d" onclick="del('${s.id}')">Delete</button></div></details></div>`}).join('');
  document.querySelectorAll('details.c ~ #list details,#list details').forEach(d=>d.ontoggle=()=>{if(d.open){const c=d.querySelector('canvas');if(c)draw(c)}})}
 function floorAt(pk){const set=S.set;return set.trail===1?pk-set.dd:-set.dd}/* chart only: floor trails the peak the whole run, no lock ceiling */
+const V={};
 function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;const r=devicePixelRatio||1,W=c.clientWidth,H=120;c.width=W*r;c.height=H*r;const x=c.getContext('2d');x.scale(r,r);
  const bad=getComputedStyle(document.documentElement).getPropertyValue('--bad').trim()||'#ef6b6b';
- /* equity path + drawdown floor (same rule the pass-odds simulation uses) */
+ /* equity path + drawdown floor over the whole run */
  let e=0,pk=0;const p=[0],fl=[floorAt(0)],vi=[];
  s.trades.forEach((v,i)=>{e+=v;pk=Math.max(pk,e);p.push(e);const f=floorAt(pk);fl.push(f);if(e<=f)vi.push(i+1)});
- const mn=Math.min(...p,...fl),mx=Math.max(...p,...fl),rg=(mx-mn)||1,L=p.length-1||1;
- const X=i=>i/L*(W-4)+2,Y=v=>H-6-(v-mn)/rg*(H-12);
+ const L=p.length-1||1,bro=new Set(vi);
+ /* visible window (zoom/pan) in trade-index units */
+ const vw=V[s.id]||(V[s.id]={a:0,b:L});if(vw.b>L)vw.b=L;if(vw.a<0)vw.a=0;if(vw.b-vw.a<1){vw.a=0;vw.b=L}
+ const a=vw.a,b=vw.b,i0=Math.max(0,Math.floor(a)-1),i1=Math.min(L,Math.ceil(b)+1);
+ let mn=Infinity,mx=-Infinity;for(let i=i0;i<=i1;i++){mn=Math.min(mn,p[i],fl[i]);mx=Math.max(mx,p[i],fl[i])}const rg=(mx-mn)||1;
+ const X=i=>(i-a)/(b-a)*(W-4)+2,Y=v=>H-6-(v-mn)/rg*(H-12);
+ x.save();x.beginPath();x.rect(0,0,W,H);x.clip();
  const zy=Y(0);x.strokeStyle='#8b95a855';x.lineWidth=1;x.beginPath();x.moveTo(0,zy);x.lineTo(W,zy);x.stroke();
  /* danger zone below the floor */
- x.fillStyle=bad+'1f';x.beginPath();x.moveTo(X(0),H);fl.forEach((f,i)=>x.lineTo(X(i),Y(f)));x.lineTo(X(L),H);x.closePath();x.fill();
- x.strokeStyle=bad+'cc';x.lineWidth=1.5;x.setLineDash([5,4]);x.beginPath();fl.forEach((f,i)=>{i?x.lineTo(X(i),Y(f)):x.moveTo(X(i),Y(f))});x.stroke();x.setLineDash([]);
- /* equity in blue; each step that ends at or below the floor is drawn red. The floor keeps trailing the true peak throughout. */
- const bro=new Set(vi);
- x.lineWidth=2;for(let i=1;i<=L;i++){x.strokeStyle=bro.has(i)?bad:'#6aa8ff';x.beginPath();x.moveTo(X(i-1),Y(p[i-1]));x.lineTo(X(i),Y(p[i]));x.stroke()}
- x.fillStyle=bad;x.strokeStyle='#fff';x.lineWidth=1;for(const i of vi){x.beginPath();x.arc(X(i),Y(p[i]),vi.length>60?2.5:4,0,7);x.fill();if(vi.length<=60)x.stroke()}
+ x.fillStyle=bad+'1f';x.beginPath();x.moveTo(X(i0),H);for(let i=i0;i<=i1;i++)x.lineTo(X(i),Y(fl[i]));x.lineTo(X(i1),H);x.closePath();x.fill();
+ x.strokeStyle=bad+'cc';x.lineWidth=1.5;x.setLineDash([5,4]);x.beginPath();for(let i=i0;i<=i1;i++){i===i0?x.moveTo(X(i),Y(fl[i])):x.lineTo(X(i),Y(fl[i]))}x.stroke();x.setLineDash([]);
+ /* equity in blue; each step that ends at or below the floor is red. Floor trails the true peak the whole run. */
+ x.lineWidth=2;for(let i=Math.max(1,i0);i<=i1;i++){x.strokeStyle=bro.has(i)?bad:'#6aa8ff';x.beginPath();x.moveTo(X(i-1),Y(p[i-1]));x.lineTo(X(i),Y(p[i]));x.stroke()}
+ const vis=vi.filter(i=>i>=i0&&i<=i1),many=vis.length>60;
+ x.fillStyle=bad;x.strokeStyle='#fff';x.lineWidth=1;for(const i of vis){x.beginPath();x.arc(X(i),Y(p[i]),many?2.5:4,0,7);x.fill();if(!many)x.stroke()}
+ x.restore();
  let eps=0;vi.forEach((i,k)=>{if(k===0||i!==vi[k-1]+1)eps++});
  const n=c.nextElementSibling;if(n){const set=S.set,kind=set.trail===1?'trailing':'static',tot=s.trades.length;
   n.className='n '+(vi.length?'bad':'mut');
-  n.textContent=vi.length?`${vi.length} of ${tot} trades sit at or below the ${usd(set.dd)} ${kind} drawdown floor, in ${eps} separate stretch${eps>1?'es':''}. First at trade #${vi[0]}, worst at trade #${vi.reduce((m,i)=>p[i]-fl[i]<p[m]-fl[m]?i:m)} (${usd(Math.min(...vi.map(i=>p[i]-fl[i])))} past the floor). Floor keeps trailing the peak; the run is not stopped.`:`Stays above the ${usd(set.dd)} ${kind} drawdown floor (dashed line) the whole run.`}}
+  n.textContent=vi.length?`${vi.length} of ${tot} trades sit at or below the ${usd(set.dd)} ${kind} drawdown floor, in ${eps} separate stretch${eps>1?'es':''}. First at trade #${vi[0]}, worst at trade #${vi.reduce((m,i)=>p[i]-fl[i]<p[m]-fl[m]?i:m)} (${usd(Math.min(...vi.map(i=>p[i]-fl[i])))} past the floor). Floor keeps trailing the peak; the run is not stopped.`:`Stays above the ${usd(set.dd)} ${kind} drawdown floor (dashed line) the whole run.`}
+ if(!c._g){c._g=1;gestures(c,s.id,L)}}
+/* zoom / pan: wheel or pinch to zoom, drag to pan, double-tap or double-click to reset */
+function gestures(c,id,L){
+ const ptr=new Map();let last=null;
+ const minSpan=Math.min(L,8);
+ const clamp=(a,b)=>{let sp=Math.max(minSpan,Math.min(L,b-a));if(a<0)a=0;if(a+sp>L)a=L-sp;return{a,b:a+sp}};
+ const set=(a,b)=>{V[id]=clamp(a,b);draw(c)};
+ const zoomAt=(f,cx)=>{const v=V[id],W=c.clientWidth,t=v.a+(cx/W)*(v.b-v.a),sp=(v.b-v.a)/f;set(t-(cx/W)*sp,t-(cx/W)*sp+sp)};
+ c.addEventListener('wheel',ev=>{ev.preventDefault();const rc=c.getBoundingClientRect();zoomAt(ev.deltaY<0?1.25:0.8,ev.clientX-rc.left)},{passive:false});
+ c.addEventListener('dblclick',()=>{V[id]={a:0,b:L};draw(c)});
+ c.addEventListener('pointerdown',ev=>{c.setPointerCapture(ev.pointerId);ptr.set(ev.pointerId,{x:ev.clientX});last=null;
+  const now=Date.now();if(ptr.size===1){if(c._t&&now-c._t<300){V[id]={a:0,b:L};draw(c);c._t=0}else c._t=now}});
+ c.addEventListener('pointermove',ev=>{if(!ptr.has(ev.pointerId))return;const rc=c.getBoundingClientRect(),W=c.clientWidth,v=V[id];
+  const prev=ptr.get(ev.pointerId);
+  if(ptr.size===1){const dx=ev.clientX-prev.x;if(dx){const d=-dx/W*(v.b-v.a);ptr.set(ev.pointerId,{x:ev.clientX});set(v.a+d,v.b+d)}}
+  else if(ptr.size===2){const o=[...ptr.entries()].find(([k])=>k!==ev.pointerId)[1];
+   const d0=Math.abs(prev.x-o.x)||1,d1=Math.abs(ev.clientX-o.x)||1;ptr.set(ev.pointerId,{x:ev.clientX});
+   const mid=(ev.clientX+o.x)/2-rc.left;zoomAt(d1/d0,mid)}});
+ const up=ev=>{ptr.delete(ev.pointerId)};c.addEventListener('pointerup',up);c.addEventListener('pointercancel',up)}
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function setBH(id,v){const s=S.strats.find(x=>x.id===id);s.bh=v===''?null:+v;save();render()}
 function setBHDD(id,v){const s=S.strats.find(x=>x.id===id);s.bhdd=v===''?null:+v;save();render()}
