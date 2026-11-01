@@ -110,7 +110,7 @@ function render(){
   <div class="row"><div style="flex:1"><label>Buy &amp; hold P&amp;L</label><input type="number" value="${s.bh??''}" onchange="setBH('${s.id}',this.value)"></div><div style="flex:1"><label>B&amp;H max drawdown $</label><input type="number" value="${s.bhdd??''}" onchange="setBHDD('${s.id}',this.value)"></div><div style="flex:1"><label>Name</label><input value="${esc(s.name)}" onchange="rename('${s.id}',this.value)"></div></div>
   <div class="row"><button class="d" onclick="del('${s.id}')">Delete</button></div></details></div>`}).join('');
  document.querySelectorAll('details.c ~ #list details,#list details').forEach(d=>d.ontoggle=()=>{if(d.open){const c=d.querySelector('canvas');if(c)draw(c)}})}
-function floorAt(pk){const set=S.set;return set.trail===1?(set.lock>0?Math.min(pk-set.dd,set.lock):pk-set.dd):-set.dd}
+function floorAt(pk){const set=S.set;return set.trail===1?pk-set.dd:-set.dd}/* chart only: floor trails the peak the whole run, no lock ceiling */
 function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;const r=devicePixelRatio||1,W=c.clientWidth,H=120;c.width=W*r;c.height=H*r;const x=c.getContext('2d');x.scale(r,r);
  const bad=getComputedStyle(document.documentElement).getPropertyValue('--bad').trim()||'#ef6b6b';
  /* equity path + drawdown floor (same rule the pass-odds simulation uses) */
