@@ -60,7 +60,7 @@ canvas{width:100%;height:120px;display:block;margin-top:10px}
 </div></details>
 
 <div class="bar"><select id="sort" onchange="render()"><option value="pass">Sort: pass odds</option><option value="eff">Sort: efficiency</option><option value="net">Sort: net profit</option><option value="pf">Sort: profit factor</option><option value="n">Sort: trades</option></select><button class="g2" onclick="togBackup()">Backup</button></div>
-<div id="bk" class="c" style="display:none"><h2>Backup / restore</h2><textarea id="bkt" placeholder="Export fills this box. To restore, paste a backup here and tap Restore."></textarea><div class="row"><button onclick="exp()">Export</button><button class="g2" onclick="imp()">Restore from box</button></div><label style="margin-top:10px">Or restore from a backup file</label><input type="file" accept=".json" onchange="impFile(this.files[0])"></div>
+<div id="bk" class="c" style="display:none"><h2>Backup / restore</h2><textarea id="bkt" placeholder="Export fills this box. To restore, paste a backup here and tap Restore."></textarea><div class="row"><button onclick="exp()">Export</button><button class="g2" onclick="imp()">Restore from box</button></div><label style="margin-top:10px">Or restore from a backup file</label><input type="file" onchange="impFile(this.files[0])"></div>
 <div id="list"></div>
 <div class="n">Pass odds come from resampling each strategy's own trades (bootstrap), so they assume trades are independent and the future resembles the past. Efficiency = profit ÷ max drawdown, forced to −99 under 100 trades. Not trading advice.</div>
 </div>
