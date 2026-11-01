@@ -23,7 +23,9 @@ input,select{width:100%;background:var(--bg);color:var(--tx);border:1px solid va
 .r{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);font-size:14px}.r span:first-child{color:var(--mut)}
 .n{color:var(--mut);font-size:12px;margin-top:8px}
 .chips{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:8px}.chips button{background:transparent;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:7px 0;font-size:12.5px;cursor:pointer;min-width:0}.chips button.rs{grid-column:1/-1;color:var(--mut);padding:6px 0}
+.nav{display:flex;gap:6px;margin:0 0 14px}.nav a{flex:1;text-align:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;color:var(--mut);text-decoration:none;font-size:14px}.nav a.on{background:var(--card);color:var(--tx);border-color:var(--acc);font-weight:600}
 </style></head><body><div class="w">
+<nav class="nav"><a class="on" href="./">Position Sizer</a><a href="scoreboard/">Scoreboard</a></nav>
 <h1>Micro Position Sizer</h1>
 <div class="s">Contracts sized from the room left on your drawdown, not account size.</div>
 
