@@ -114,21 +114,22 @@ function floorAt(pk){const set=S.set;return set.trail===1?(set.lock>0?Math.min(p
 function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;const r=devicePixelRatio||1,W=c.clientWidth,H=120;c.width=W*r;c.height=H*r;const x=c.getContext('2d');x.scale(r,r);
  const bad=getComputedStyle(document.documentElement).getPropertyValue('--bad').trim()||'#ef6b6b';
  /* equity path + drawdown floor (same rule the pass-odds simulation uses) */
- let e=0,pk=0,br=-1;const p=[0],fl=[floorAt(0)];
- s.trades.forEach((v,i)=>{e+=v;pk=Math.max(pk,e);p.push(e);const f=floorAt(pk);fl.push(f);if(br<0&&e<=f)br=i+1});
+ let e=0,pk=0;const p=[0],fl=[floorAt(0)],vi=[];
+ s.trades.forEach((v,i)=>{e+=v;pk=Math.max(pk,e);p.push(e);const f=floorAt(pk);fl.push(f);if(e<=f)vi.push(i+1)});
  const mn=Math.min(...p,...fl),mx=Math.max(...p,...fl),rg=(mx-mn)||1,L=p.length-1||1;
  const X=i=>i/L*(W-4)+2,Y=v=>H-6-(v-mn)/rg*(H-12);
  const zy=Y(0);x.strokeStyle='#8b95a855';x.lineWidth=1;x.beginPath();x.moveTo(0,zy);x.lineTo(W,zy);x.stroke();
  /* danger zone below the floor */
  x.fillStyle=bad+'1f';x.beginPath();x.moveTo(X(0),H);fl.forEach((f,i)=>x.lineTo(X(i),Y(f)));x.lineTo(X(L),H);x.closePath();x.fill();
  x.strokeStyle=bad+'cc';x.lineWidth=1.5;x.setLineDash([5,4]);x.beginPath();fl.forEach((f,i)=>{i?x.lineTo(X(i),Y(f)):x.moveTo(X(i),Y(f))});x.stroke();x.setLineDash([]);
- /* equity: blue until the rule is broken, red after */
- const seg=(a,b,col)=>{x.strokeStyle=col;x.lineWidth=2;x.beginPath();for(let i=a;i<=b;i++){i===a?x.moveTo(X(i),Y(p[i])):x.lineTo(X(i),Y(p[i]))}x.stroke()};
- if(br<0)seg(0,L,'#6aa8ff');else{seg(0,br-1,'#6aa8ff');seg(br-1,L,bad)}
- if(br>=0){x.fillStyle=bad;x.strokeStyle='#fff';x.lineWidth=1.5;x.beginPath();x.arc(X(br),Y(p[br]),5,0,7);x.fill();x.stroke()}
- const n=c.nextElementSibling;if(n){const set=S.set,kind=set.trail===1?'trailing':'static';
-  n.className='n '+(br>=0?'bad':'mut');
-  n.textContent=br>=0?`Breaks the ${usd(set.dd)} ${kind} drawdown rule at trade #${br} (equity ${usd(p[br])}, floor ${usd(fl[br])}).`:`Stays above the ${usd(set.dd)} ${kind} drawdown floor (dashed line) the whole run.`}}
+ /* equity in blue; each step that ends at or below the floor is drawn red. The floor keeps trailing the true peak throughout. */
+ const bro=new Set(vi);
+ x.lineWidth=2;for(let i=1;i<=L;i++){x.strokeStyle=bro.has(i)?bad:'#6aa8ff';x.beginPath();x.moveTo(X(i-1),Y(p[i-1]));x.lineTo(X(i),Y(p[i]));x.stroke()}
+ x.fillStyle=bad;x.strokeStyle='#fff';x.lineWidth=1;for(const i of vi){x.beginPath();x.arc(X(i),Y(p[i]),vi.length>60?2.5:4,0,7);x.fill();if(vi.length<=60)x.stroke()}
+ let eps=0;vi.forEach((i,k)=>{if(k===0||i!==vi[k-1]+1)eps++});
+ const n=c.nextElementSibling;if(n){const set=S.set,kind=set.trail===1?'trailing':'static',tot=s.trades.length;
+  n.className='n '+(vi.length?'bad':'mut');
+  n.textContent=vi.length?`${vi.length} of ${tot} trades sit at or below the ${usd(set.dd)} ${kind} drawdown floor, in ${eps} separate stretch${eps>1?'es':''}. First at trade #${vi[0]}, worst at trade #${vi.reduce((m,i)=>p[i]-fl[i]<p[m]-fl[m]?i:m)} (${usd(Math.min(...vi.map(i=>p[i]-fl[i])))} past the floor). Floor keeps trailing the peak; the run is not stopped.`:`Stays above the ${usd(set.dd)} ${kind} drawdown floor (dashed line) the whole run.`}}
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function setBH(id,v){const s=S.strats.find(x=>x.id===id);s.bh=v===''?null:+v;save();render()}
 function setBHDD(id,v){const s=S.strats.find(x=>x.id===id);s.bhdd=v===''?null:+v;save();render()}
