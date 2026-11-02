@@ -143,7 +143,7 @@ function draw(c){const s=S.strats.find(x=>x.id===c.dataset.id);if(!s)return;cons
    x.strokeStyle=ln;x.lineWidth=1;x.beginPath();x.moveTo(cx,0);x.lineTo(cx,H-PB+4);x.stroke();
    const dot=(v,col)=>{x.fillStyle=col;x.strokeStyle='#fff';x.lineWidth=1.5;x.beginPath();x.arc(cx,Y(v),4.5,0,7);x.fill();x.stroke()};
    dot(fl[k],bad);dot(p[k],bro.has(k)?bad:'#6aa8ff');
-   const lines=[k===0?'Start':'Trade #'+k,TS&&k>0?fmtT(T(k),true,true):null,'Equity '+usd(p[k]),'Limit '+usd(fl[k])+(bro.has(k)?' · BREACH':'')].filter(Boolean);
+   const lines=[k===0?'Start':'Trade #'+k,TS&&k>0?fmtD(T(k)):null,TS&&k>0?fmtClk(T(k)):null,'Equity '+usd(p[k]),'Limit '+usd(fl[k])+(bro.has(k)?' · BREACH':'')].filter(Boolean);
    x.font='600 11px system-ui,sans-serif';const bw=Math.max(...lines.map(t=>x.measureText(t).width))+16,bh=lines.length*14+8;
    const bx=cx+10+bw>W?cx-10-bw:cx+10,by=2;
    x.fillStyle=cd;x.globalAlpha=.94;x.beginPath();x.roundRect?x.roundRect(bx,by,bw,bh,6):x.rect(bx,by,bw,bh);x.fill();x.globalAlpha=1;x.strokeStyle=bro.has(k)?bad:ln;x.lineWidth=1;x.stroke();
@@ -184,6 +184,8 @@ function loadFile(f){if(!f)return;const r=new FileReader();r.onload=()=>{$('past
 function csv(t){const rows=[];let r=[],c='',q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=false}else c+=ch}else if(ch=='"')q=true;else if(ch==','){r.push(c);c=''}else if(ch=='\n'||ch=='\r'){if(ch=='\r'&&t[i+1]=='\n')i++;r.push(c);c='';if(r.some(x=>x!==''))rows.push(r);r=[]}else c+=ch}
  r.push(c);if(r.some(x=>x!==''))rows.push(r);return rows}
 function dt(s){const m=String(s).match(/(\d+)\/(\d+)\/(\d+)[ T](\d+):(\d+):(\d+)\s*([AaPp][Mm])?/);if(!m)return Date.parse(s)||0;let h=+m[4];if(m[7]){const pm=/p/i.test(m[7]);if(pm&&h<12)h+=12;if(!pm&&h===12)h=0}return Date.UTC(+m[3],+m[1]-1,+m[2],h,+m[5],+m[6])}
+function fmtD(ms){return new Date(ms).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'})}
+function fmtClk(ms){return new Date(ms).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'UTC'})}
 function fmtT(ms,wt,yr){const o={month:'short',day:'numeric',timeZone:'UTC'};if(yr)o.year='numeric';if(wt){o.hour='2-digit';o.minute='2-digit';o.hour12=false}return new Date(ms).toLocaleString('en-US',o)}
 function parse(){
  const t=$('paste').value.trim();if(!t)return null;
