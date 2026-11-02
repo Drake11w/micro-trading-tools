@@ -59,16 +59,17 @@ canvas{width:100%;height:136px;display:block;margin-top:10px;touch-action:pan-y;
 <div><label>Simulations</label><input id="s_sims" type="number"></div>
 <div><label>Candidate pass odds ≥ %</label><input id="s_passMin" type="number"></div>
 <div><label>Efficiency watch ≥</label><input id="s_eff" type="number"></div>
+<div><label>Eval fee $ / attempt</label><input id="s_fee" type="number"></div>
 </div></details>
 
-<div class="bar"><select id="sort" onchange="render()"><option value="pass">Sort: pass odds</option><option value="eff">Sort: efficiency</option><option value="net">Sort: net profit</option><option value="pf">Sort: profit factor</option><option value="n">Sort: trades</option></select><button class="g2" onclick="togBackup()">Backup</button></div>
+<div class="bar"><select id="sort" onchange="render()"><option value="pass">Sort: pass odds</option><option value="eff">Sort: efficiency</option><option value="net">Sort: net profit</option><option value="pf">Sort: profit factor</option><option value="n">Sort: trades</option><option value="exp">Sort: expected time to pass</option></select><button class="g2" onclick="togBackup()">Backup</button></div>
 <div id="bk" class="c" style="display:none"><h2>Backup / restore</h2><textarea id="bkt" placeholder="Export fills this box. To restore, paste a backup here and tap Restore."></textarea><div class="row"><button onclick="exp()">Export</button><button class="g2" onclick="imp()">Restore from box</button></div><label style="margin-top:10px">Or restore from a backup file</label><input type="file" onchange="impFile(this.files[0])"></div>
 <div id="list"></div>
-<div class="n">Pass odds come from resampling each strategy's own trades (bootstrap), so they assume trades are independent and the future resembles the past. Avg time to pass = average trades to pass at this strategy's own historical pace of trading (needs exit times). Efficiency = profit ÷ max drawdown, forced to −99 under 100 trades. Not trading advice.</div>
+<div class="n">Pass odds come from resampling each strategy's own trades (bootstrap), so they assume trades are independent and the future resembles the past. Avg time to pass = average trades to pass at this strategy's own historical pace of trading (needs exit times). Exp. time and fees to pass count failed attempts too: each failure restarts, so expected time = average attempt length ÷ pass odds and expected fees = fee ÷ pass odds (an attempt that times out counts its full length). Efficiency = profit ÷ max drawdown, forced to −99 under 100 trades. Not trading advice.</div>
 </div>
 <script>
 const $=i=>document.getElementById(i);
-const DEF={target:3000,dd:2000,trail:1,maxT:300,cons:50,sims:3000,passMin:50,eff:5,lock:100};
+const DEF={target:3000,dd:2000,trail:1,maxT:300,cons:50,sims:3000,passMin:50,eff:5,lock:100,fee:100};
 let S={strats:[],set:{...DEF}};
 try{const x=JSON.parse(localStorage.getItem('sb1')||'null');if(x){S.strats=x.strats||[];S.set={...DEF,...(x.set||{})}}}catch(e){}
 const save=()=>{try{localStorage.setItem('sb1',JSON.stringify(S))}catch(e){}};
@@ -81,20 +82,23 @@ function metrics(st){
  const w=a.filter(v=>v>0),l=a.filter(v=>v<0),gw=w.reduce((x,y)=>x+y,0),gl=-l.reduce((x,y)=>x+y,0);
  const eff=n<100?-99:(mdd>0?eq/mdd:Infinity);
  const r=rng(Math.round(Math.abs(eq)*100)+n*7919);const N=Math.max(200,Math.min(20000,set.sims|0));
- let pass=0,bust=0,to=0,sumT=0;const cap=set.cons/100,trail=set.trail===1;
+ let pass=0,bust=0,to=0,sumT=0,sumAll=0;const cap=set.cons/100,trail=set.trail===1;
  for(let s=0;s<N;s++){let e=0,p=0,res=0,t,best=0;
   for(t=1;t<=set.maxT;t++){const v=a[(r()*n)|0];e+=v;if(v>best)best=v;if(e>p)p=e;
    const fl=trail?(set.lock>0?Math.min(p-set.dd,set.lock):p-set.dd):-set.dd;if(e<=fl){res=-1;break}
    if(e>=set.target){if(cap>0&&best>cap*e)continue;res=1;break}}
-  if(res===1){pass++;sumT+=t}else if(res===-1)bust++;else to++}
- return cache[key]={n,net:eq,mdd,eff,wr:w.length/n,pf:gl?gw/gl:Infinity,exp:eq/n,pass:pass/N,bust:bust/N,to:to/N,att:pass?sumT/pass:0}}
-function passTime(s,m){if(!m.att)return'—';const t=s.times;if(!t||t.length<2||!(t.at(-1)>t[0]))return'n/a (no times)';const days=m.att*(t.at(-1)-t[0])/864e5/s.trades.length;return days<45?'~'+fmt(days)+' days':'~'+fmt(days/30.44,1)+' mo'}
+  sumAll+=(res===0?set.maxT:t);if(res===1){pass++;sumT+=t}else if(res===-1)bust++;else to++}
+ return cache[key]={n,net:eq,mdd,eff,wr:w.length/n,pf:gl?gw/gl:Infinity,exp:eq/n,pass:pass/N,bust:bust/N,to:to/N,att:pass?sumT/pass:0,expT:pass?(sumAll/N)/(pass/N):1e9,fees:pass?set.fee/(pass/N):1e9}}
+function span(days){return days<45?'~'+fmt(days)+' days':'~'+fmt(days/30.44,1)+' mo'}
+function pace(s){const t=s.times;return(!t||t.length<2||!(t.at(-1)>t[0]))?0:(t.at(-1)-t[0])/864e5/s.trades.length}
+function passTime(s,m){if(!m.att)return'—';const p=pace(s);return p?span(m.att*p):'n/a (no times)'}
+function expTime(s,m){if(m.expT>=1e9)return'never';const p=pace(s);return p?span(m.expT*p):fmt(m.expT)+' trades'}
 function usd(x,d=0){return(x<0?'−':'')+'$'+fmt(Math.abs(x),d)}
 function fmt(x,d=0){return isFinite(x)?x.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'∞'}
 function beats(s,m){if(s.bh==null)return true;return s.bhdd>0?(m.mdd>0?m.net/m.mdd:Infinity)>s.bh/s.bhdd:m.net>s.bh}
 function render(){
  const key=$('sort').value;const L=S.strats.map(s=>({s,m:metrics(s)}));
- const val={pass:x=>x.m.pass,eff:x=>x.m.eff,net:x=>x.m.net,pf:x=>isFinite(x.m.pf)?x.m.pf:1e9,n:x=>x.m.n}[key];
+ const val={pass:x=>x.m.pass,eff:x=>x.m.eff,net:x=>x.m.net,pf:x=>isFinite(x.m.pf)?x.m.pf:1e9,n:x=>x.m.n,exp:x=>-x.m.expT*(pace(x.s)||1)}[key];
  L.sort((a,b)=>val(b)-val(a));
  if(!L.length){$('list').innerHTML='<div class="c empty">No strategies yet. Add a trade export or try the demo.</div>';return}
  $('list').innerHTML=L.map(({s,m},i)=>{
@@ -106,7 +110,7 @@ function render(){
   if(s.bh!=null){const bt=beats(s,m);b+=`<span class="badge ${bt?'ok':'bad'}">${bt?'Beats':'Loses to'} buy &amp; hold${s.bhdd>0?' (eff '+fmt(m.eff===-99?(m.mdd>0?m.net/m.mdd:0):m.net/m.mdd,1)+' vs '+fmt(s.bh/s.bhdd,1)+')':' ('+usd(s.bh)+')'}</span>`}
   const warn=m.n<50?`<div class="n warn">Only ${m.n} trades: treat these odds as unreliable.</div>`:'';
   return `<div class="c" id="c${s.id}"><div class="rank"><div class="rn">${i+1}</div><div style="flex:1"><div class="nm">${esc(s.name)}</div><div class="mut" style="font-size:12px">Eval pass odds</div><div class="pv ${pc}">${fmt(m.pass*100,1)}%</div>${b}</div></div>
-  ${warn}<div class="m"><div>Net<b class="${m.net>=0?'ok':'bad'}">${usd(m.net)}</b></div><div>Max DD<b>${usd(m.mdd)}</b></div><div>Efficiency<b>${m.eff===-99?'−99':fmt(m.eff,2)}</b></div><div>Trades<b>${m.n}</b></div><div>Win rate<b>${fmt(m.wr*100)}%</b></div><div>Profit factor<b>${fmt(m.pf,2)}</b></div><div>Expectancy<b>${usd(m.exp,1)}</b></div><div>Bust<b class="bad">${fmt(m.bust*100,1)}%</b></div><div>Avg trades to pass<b>${m.att?fmt(m.att):'—'}</b></div><div>Avg time to pass<b>${passTime(s,m)}</b></div></div>
+  ${warn}<div class="m"><div>Net<b class="${m.net>=0?'ok':'bad'}">${usd(m.net)}</b></div><div>Max DD<b>${usd(m.mdd)}</b></div><div>Efficiency<b>${m.eff===-99?'−99':fmt(m.eff,2)}</b></div><div>Trades<b>${m.n}</b></div><div>Win rate<b>${fmt(m.wr*100)}%</b></div><div>Profit factor<b>${fmt(m.pf,2)}</b></div><div>Expectancy<b>${usd(m.exp,1)}</b></div><div>Bust<b class="bad">${fmt(m.bust*100,1)}%</b></div><div>Avg trades to pass<b>${m.att?fmt(m.att):'—'}</b></div><div>Avg time to pass<b>${passTime(s,m)}</b></div><div>Exp. time to pass<b>${expTime(s,m)}</b></div><div>Exp. fees to pass<b>${m.fees>=1e9?'—':usd(m.fees)}</b></div></div>
   <details><summary style="margin-top:10px">Details</summary><canvas data-id="${s.id}"></canvas><div class="n"></div><div class="n">Time axis shows each trade's exit time (re-import a trade export with an exit-time column to get it). Touch or hover for a crosshair · pinch or scroll to zoom · drag to pan · double-tap to reset</div>
   <div class="row"><div style="flex:1"><label>Buy &amp; hold P&amp;L</label><input type="number" value="${s.bh??''}" onchange="setBH('${s.id}',this.value)"></div><div style="flex:1"><label>B&amp;H max drawdown $</label><input type="number" value="${s.bhdd??''}" onchange="setBHDD('${s.id}',this.value)"></div><div style="flex:1"><label>Name</label><input value="${esc(s.name)}" onchange="rename('${s.id}',this.value)"></div></div>
   <div class="row"><button class="d" onclick="del('${s.id}')">Delete</button></div></details></div>`}).join('');
